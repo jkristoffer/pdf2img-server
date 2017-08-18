@@ -2,35 +2,30 @@ const multiparty = require('multiparty');
 const http = require('http');
 const util = require('util');
 const fs = require('fs');
-const pdf2img = require('pdf2img');
 const exec = require('child_process').exec;
 const archiver = require('archiver');
 const archive = archiver('zip', { zlib: { level: 9 } });
 
-// clean up on start
-exec('rm -r ./tmp && mkdir tmp');
-
-let originalName;
-
-pdf2img.setOptions({
-   type: 'png',
-   size: 1024,
-   page: null
-});
-
+let originalName, email;
 
 http.createServer((req,res) => {
    const { url, method } = req;
 
    if (url === '/upload' && method === 'POST') {
-      res.setTimeout(3600 * 1000)
-      uploadSeq(req,res);
+      // clean up on start
+
+      exec('rm ./tmp/* -rf', (err,stdin,stderr) => {
+         console.log(err, 'in', stdin, 'err', stderr);
+         uploadSeq(req,res);
+      });
+
       return;
    }
 
    res.writeHead(200, {'content-type': 'text/html'});
    res.end(`
        <form action="/upload" enctype="multipart/form-data" method="post">
+         <input type="text" name="email" placeholder="email" /><br/>
          <input type="file" name="upload"/><br/><br/>
          <input type="submit" value="Upload"/>
        </form>
@@ -38,10 +33,15 @@ http.createServer((req,res) => {
 }).listen(3005);
 
 
-function uploadSeq(req, res){
+function uploadSeq(req, res){ 
+   console.log('uploadSeq');
    const form = new multiparty.Form({
       autoFiles: true,
       uploadDir: './tmp/'
+   });
+
+   form.on('field', (name, value) => { 
+      if(name == 'email') email = value || 'cattails27@gmail.com'
    });
 
    form.on('file', (name, file) => {
@@ -49,26 +49,39 @@ function uploadSeq(req, res){
    });
 
    form.on('close', () => {
+      console.log('end request');
+      res.writeHead(200, {'content-type': 'text/html'});
+      res.end('<p>The files will be sent to the email: '+email+'</p>');
       readConvertFileSequence(req,res);
    });
 
    form.parse(req, (err, fields, files) => {
-      console.log('received upload: \n\n');
+      console.log('received upload:');
+      console.log(err, fields, files);
    });
 }
 
 function readConvertFileSequence(req, res){
    fs.readdir('./tmp', (err, items) => {
       items.forEach(item => {
-         pdf2img.setOptions({
-            outputname: originalName,
-            outputdir: './tmp/'+originalName.split('.')[0]
-         });
+         let noExt = originalName.split('.')[0];
+         noExt = noExt.replace(/ /g, '\\ ');
+         item = item.replace(/ /g, '\\ ');
 
-         console.log('Converting', item);
-         pdf2img.convert('./tmp/'+item, (err,info) => {
-            err && console.error(err);
-            console.log('Converting Complete', item);
+         const cmd = `
+            mkdir ./tmp/${noExt} && \
+            convert -density 150                \
+                    ${__dirname}/tmp/${item}               \
+                    -background white           \
+                    -alpha remove               \
+                    -quality 65                 \
+                    ${__dirname}/tmp/${noExt}/${noExt}-%02d.jpg
+         `;
+
+         exec(cmd, (err, stdout, stderr) => {
+            !!err && console.error(err);
+            console.log(`stdout: ${stdout}`);
+            console.log(`stderr: ${stderr}`);
             zipSeq(req, res);
          });
       });
@@ -76,17 +89,23 @@ function readConvertFileSequence(req, res){
 }
 
 function zipSeq(req,res) {
-   console.log('Compressing');
+   const dir = originalName.split('.')[0];
+   const output = fs.createWriteStream(__dirname + '/' + dir + '.zip');
+   console.log('Compressing', dir);
 
-   archive.directory('./tmp/'+originalName, false);
-   archive.finalize();
-   console.log('Compressing Complete');
-
-   res.writeHead(200, {
-      'content-type': 'application/zip',
-      'content-disposition': 'attachment; filename='+originalName+'.zip'
+   output.on('close', () => {
+      console.log('Finished Zipping');
+      const cmd = `echo "Finished converting ${dir}" | mail -s "Pdf2Img Complete" ${email} -A ${dir}.zip`;
+      exec(cmd, (err, stdout, stderr) => {
+         !!err && console.error(err);
+         console.log(`stdout: ${stdout}`);
+         console.log(`stderr: ${stderr}`);
+      });
    });
-   archive.pipe(res);
+
+   archive.pipe(output);
+   archive.directory('./tmp/'+dir, false);
+   archive.finalize();
    // clean up on end
-   exec('rm -r ./tmp && mkdir tmp');
+   // exec('rm -r ./tmp && mkdir tmp');
 }
