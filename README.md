@@ -21,4 +21,4 @@ Apart from the obvious(NodesJS), it uses `imagemagick` and the `mail` command.
 
 This wasn't meant to be a serious project from the start but a makeshift means to a problem I had. The task was to convert massive
 amounts of PDF files into images and at the same time allow it to be super easy to use for anyone. 
-That resulted in said project. Finally, this project is riddled with problems and totally unsafe. You have been warned! 
+That resulted in said project. Finally, this project is riddled with potential problems and totally unsafe in terms of security. You have been warned! Nonetheless, it works as it should!
