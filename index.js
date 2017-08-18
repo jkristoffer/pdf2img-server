@@ -4,7 +4,6 @@ const util = require('util');
 const fs = require('fs');
 const exec = require('child_process').exec;
 const archiver = require('archiver');
-const archive = archiver('zip', { zlib: { level: 9 } });
 
 let originalName, email;
 
@@ -14,7 +13,7 @@ http.createServer((req,res) => {
    if (url === '/upload' && method === 'POST') {
       // clean up on start
 
-      exec('rm ./tmp/* -rf && rm *.zip', (err,stdin,stderr) => {
+      exec('rm ./tmp/* -rf', (err,stdin,stderr) => {
          console.log(err, 'in', stdin, 'err', stderr);
          uploadSeq(req,res);
       });
@@ -92,16 +91,22 @@ function zipSeq(req,res) {
    const dir = originalName.split('.')[0];
    const output = fs.createWriteStream(__dirname + '/' + dir + '.zip');
    const dirEscape = dir.replace(/ /g, '\\ ');
+   const archive = archiver('zip', { zlib: { level: 9 } });
    console.log('Compressing', dir);
 
    output.on('close', () => {
       console.log('Finished Zipping');
-      const cmd = `echo "Finished converting ${dir}" | mail -s "Pdf2Img Complete" ${email} -A ${dirEscape}.zip`;
+      const cmd = `echo "Finished converting ${dir}" | mail -s "Pdf2Img Complete" ${email} -A ${dirEscape}.zip -a "From: PDF Guy <pete@pdf2img.com>"`;
       exec(cmd, (err, stdout, stderr) => {
-	 console.log('send email');
+	 console.log('Sent mail to: ' + email);
          !!err && console.error(err);
          console.log(`stdout: ${stdout}`);
          console.log(`stderr: ${stderr}`);
+	 exec(`rm ${dirEscape}.zip`, (err, stdout, stderr) => {
+	   	 !!err && console.error(err);
+		 console.log(`stdout: ${stdout}`);
+		 console.log(`stderr: ${stderr}`);
+	 });
       });
    });
 
