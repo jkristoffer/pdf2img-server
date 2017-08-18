@@ -14,7 +14,7 @@ http.createServer((req,res) => {
    if (url === '/upload' && method === 'POST') {
       // clean up on start
 
-      exec('rm ./tmp/* -rf', (err,stdin,stderr) => {
+      exec('rm ./tmp/* -rf && rm *.zip', (err,stdin,stderr) => {
          console.log(err, 'in', stdin, 'err', stderr);
          uploadSeq(req,res);
       });
@@ -91,12 +91,14 @@ function readConvertFileSequence(req, res){
 function zipSeq(req,res) {
    const dir = originalName.split('.')[0];
    const output = fs.createWriteStream(__dirname + '/' + dir + '.zip');
+   const dirEscape = dir.replace(/ /g, '\\ ');
    console.log('Compressing', dir);
 
    output.on('close', () => {
       console.log('Finished Zipping');
-      const cmd = `echo "Finished converting ${dir}" | mail -s "Pdf2Img Complete" ${email} -A ${dir}.zip`;
+      const cmd = `echo "Finished converting ${dir}" | mail -s "Pdf2Img Complete" ${email} -A ${dirEscape}.zip`;
       exec(cmd, (err, stdout, stderr) => {
+	 console.log('send email');
          !!err && console.error(err);
          console.log(`stdout: ${stdout}`);
          console.log(`stderr: ${stderr}`);
